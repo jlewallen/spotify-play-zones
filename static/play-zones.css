@@ -1,0 +1,30 @@
+body {
+    background: #efefef;
+}
+
+div.devices {
+}
+
+div.device {
+    height: 100px;
+    padding: 10px;
+    font-size: 34px;
+    cursor: pointer;
+    text-align: center;
+}
+
+div.device .name {
+    width: 100%;
+}
+
+div.device .details {
+    width: 100%;
+    font-weight: normal;
+    font-size: 12px;
+}
+
+div.device.active {
+    background: #aaffaa;
+    font-weight: bold;
+    border: 1px #dfdfdf solid;
+}
