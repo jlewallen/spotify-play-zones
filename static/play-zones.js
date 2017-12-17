@@ -29,12 +29,20 @@ class PlayZonesPage extends React.Component {
         });
     }
 
+    refreshAndSchedule() {
+        this.refresh().then(() => {
+            setTimeout(() => {
+                this.refreshAndSchedule();
+            }, 1000);
+        });
+    }
+
     componentWillMount() {
         this.setState( {
             devices: []
         });
 
-        this.refresh();
+        this.refreshAndSchedule();
     }
 
     selectDevice(device) {
