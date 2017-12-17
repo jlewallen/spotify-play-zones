@@ -14,7 +14,21 @@ class Device extends React.Component {
         return (
             <div className={classes} onClick={() => onClick()}>
                 <div className="name">{device.name}</div>
-                <div className="details">{device.type} Vol = {device.volume_percent}</div>
+                <div className="details">{device.type} volume @ {device.volume_percent}</div>
+            </div>
+        );
+    }
+}
+
+class Playing extends React.Component {
+    render() {
+        const { playing } = this.props;
+
+        return (
+            <div className="playing row">
+                <div className="title">{playing.Name}</div>
+                <div className="album">{playing.Album}</div>
+                <div className="artists">{playing.Artists.map((a, i) => (<span key={i}>{a}</span>))}</div>
             </div>
         );
     }
@@ -24,7 +38,8 @@ class PlayZonesPage extends React.Component {
     refresh() {
         return $.getJSON("devices.json").then((data) => {
             return this.setState({
-                devices: data
+                playing: data.Playing,
+                devices: data.Devices
             });
         });
     }
@@ -33,12 +48,15 @@ class PlayZonesPage extends React.Component {
         this.refresh().then(() => {
             setTimeout(() => {
                 this.refreshAndSchedule();
-            }, 1000);
+            }, 10000);
         });
     }
 
     componentWillMount() {
-        this.setState( {
+        this.setState({
+            playing: {
+                Artists: []
+            },
             devices: []
         });
 
@@ -62,10 +80,11 @@ class PlayZonesPage extends React.Component {
     }
 
     render() {
-        const { devices } = this.state;
+        const { playing, devices } = this.state;
 
         return (
             <div>
+                <Playing playing={playing} />
                 {devices.map((d, i) => (<Device key={i} device={d} onClick={() => this.selectDevice(d)} />))}
             </div>
         );

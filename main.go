@@ -15,7 +15,7 @@ type DeviceChanger struct {
 	SpotifyClient *spotify.Client
 }
 
-func (dc *DeviceChanger) Transfer(id spotify.ID) (d []spotify.PlayerDevice, err error) {
+func (dc *DeviceChanger) Transfer(id spotify.ID) (ws *WebState, err error) {
 	if !dc.IsPlaying(id) {
 		err = dc.SpotifyClient.TransferPlayback(id, true)
 		if err != nil {
@@ -23,7 +23,7 @@ func (dc *DeviceChanger) Transfer(id spotify.ID) (d []spotify.PlayerDevice, err 
 		}
 	}
 
-	return dc.Devices()
+	return dc.WebState()
 }
 
 func (dc *DeviceChanger) IsPlaying(id spotify.ID) bool {
@@ -38,6 +38,53 @@ func (dc *DeviceChanger) IsPlaying(id spotify.ID) bool {
 	return false
 }
 
+type Playing struct {
+	Name    string
+	Album   string
+	Artists []string
+}
+
+type WebState struct {
+	Devices []spotify.PlayerDevice
+	Playing Playing
+}
+
+func getArtistNames(t *spotify.FullTrack) []string {
+	names := make([]string, 0)
+	for _, a := range t.Artists {
+		names = append(names, a.Name)
+	}
+	return names
+}
+
+func (dc *DeviceChanger) WebState() (ws *WebState, err error) {
+	playerState, err := dc.SpotifyClient.PlayerState()
+	if err != nil {
+		log.Printf("Error: %v", err)
+	}
+	log.Printf("%+v", playerState.Device.Name)
+	item := playerState.CurrentlyPlaying.Item
+	if item != nil {
+		log.Printf("%+v", item.Album)
+		log.Printf("%+v", item.Artists)
+		log.Printf("%+v", item.Name)
+	}
+
+	devices, err := dc.SpotifyClient.PlayerDevices()
+	if err != nil {
+		log.Printf("Error: %v", err)
+	}
+
+	return &WebState{
+		Devices: devices,
+		Playing: Playing{
+			Name:    item.Name,
+			Album:   item.Album.Name,
+			Artists: getArtistNames(item),
+		},
+	}, nil
+}
+
 func (dc *DeviceChanger) Devices() (d []spotify.PlayerDevice, err error) {
 	return dc.SpotifyClient.PlayerDevices()
 }
@@ -49,12 +96,12 @@ type Options struct {
 
 func Devices(dc *DeviceChanger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		devices, err := dc.Devices()
+		state, err := dc.WebState()
 		if err != nil {
 			log.Printf("Error listing devices: %v", err)
 		}
 
-		b, _ := json.Marshal(devices)
+		b, _ := json.Marshal(state)
 		w.Write(b)
 	}
 }
@@ -73,12 +120,13 @@ func Transfer(dc *DeviceChanger) http.HandlerFunc {
 		}
 
 		log.Printf("Transfering %s...", t)
-		devices, err := dc.Transfer(spotify.ID(t.Id))
+
+		state, err := dc.Transfer(spotify.ID(t.Id))
 		if err != nil {
 			log.Fatalf("Error transfering playback: %v", err)
 		}
 
-		b, _ := json.Marshal(devices)
+		b, _ := json.Marshal(state)
 		w.Write(b)
 	}
 }
@@ -86,7 +134,7 @@ func Transfer(dc *DeviceChanger) http.HandlerFunc {
 func main() {
 	o := Options{}
 
-	flag.BoolVar(&o.WebServer, "web-server", true, "start web server")
+	flag.BoolVar(&o.WebServer, "web-server", false, "start web server")
 	flag.StringVar(&o.Transfer, "transfer", "", "transfer playback to the specified device")
 
 	flag.Parse()
@@ -113,7 +161,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("Found your %+v", playerState.Device)
+	log.Printf("%+v", playerState)
 
 	devices, err := sc.PlayerDevices()
 	if err != nil {
