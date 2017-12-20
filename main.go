@@ -75,7 +75,9 @@ func (dc *DeviceChanger) WebState(base string) (ws *WebState, err error) {
 	playerState, err := dc.SpotifyClient.PlayerState()
 	if err != nil {
 		log.Printf("Error: %v", err)
+		return nil, fmt.Errorf("Error getting state: %v", err)
 	}
+
 	log.Printf("%+v", playerState.Device.Name)
 	item := playerState.CurrentlyPlaying.Item
 	if item != nil {
@@ -87,6 +89,7 @@ func (dc *DeviceChanger) WebState(base string) (ws *WebState, err error) {
 	devices, err := dc.SpotifyClient.PlayerDevices()
 	if err != nil {
 		log.Printf("Error: %v", err)
+		return nil, fmt.Errorf("Error getting state: %v", err)
 	}
 
 	return &WebState{
