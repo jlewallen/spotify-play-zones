@@ -53,6 +53,9 @@ type WebState struct {
 
 func getArtistNames(t *spotify.FullTrack) []string {
 	names := make([]string, 0)
+	if t == nil {
+		return names
+	}
 	for _, a := range t.Artists {
 		names = append(names, a.Name)
 	}
