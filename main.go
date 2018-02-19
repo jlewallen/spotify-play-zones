@@ -27,6 +27,19 @@ func (dc *DeviceChanger) Transfer(base string, id spotify.ID) (ws *WebState, err
 	return dc.WebState(base)
 }
 
+func (dc *DeviceChanger) TransferByName(base string, name string) (ws *WebState, err error) {
+	devices, err := dc.Devices()
+	if err == nil {
+		for _, d := range devices {
+			if d.Name == name {
+				return dc.Transfer(base, d.ID)
+			}
+		}
+	}
+
+	return dc.WebState(base)
+}
+
 func (dc *DeviceChanger) IsPlaying(id spotify.ID) bool {
 	devices, err := dc.Devices()
 	if err == nil {
@@ -160,9 +173,32 @@ func Transfer(dc *DeviceChanger) http.HandlerFunc {
 	}
 }
 
-func TagTransfer(dc *DeviceChanger) http.HandlerFunc {
+func TagTransfer(dc *DeviceChanger, tokens []string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if len(tokens) > 0 {
+			given := r.URL.Query()["token"]
+			if given == nil {
+				log.Printf("No token, even though one is required.")
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			valid := false
+			for _, t := range tokens {
+				if given[0] == t {
+					valid = true
+					break
+				}
+			}
+			if !valid {
+				log.Printf("Invalid token")
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+
+			log.Printf("Token is good!")
+		}
 		id := r.URL.Query()["id"]
+		name := r.URL.Query()["name"]
 		if id != nil && len(id) == 1 {
 			log.Printf("Transfering %s...", id)
 
@@ -172,8 +208,20 @@ func TagTransfer(dc *DeviceChanger) http.HandlerFunc {
 				http.Error(w, fmt.Sprintf("Error transfering playback: %v", err), http.StatusInternalServerError)
 				return
 			}
+		} else if name != nil && len(name) == 1 {
+			log.Printf("Transfering %s...", name)
+
+			_, err := dc.TransferByName(detectBase(r), name[0])
+			if err != nil {
+				log.Printf("Error transfering playback: %v", err)
+				http.Error(w, fmt.Sprintf("Error transfering playback: %v", err), http.StatusInternalServerError)
+				return
+			}
+		} else {
+			log.Printf("Nowhere given to transfer to")
 		}
 
+		log.Printf("Redirect!")
 		http.Redirect(w, r, "/spotify", 307)
 	}
 }
@@ -185,6 +233,8 @@ func main() {
 	flag.StringVar(&o.Transfer, "transfer", "", "transfer playback to the specified device")
 
 	flag.Parse()
+
+	log.Printf("%+v", o)
 
 	logFile, err := os.OpenFile("play-zones.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
@@ -232,7 +282,11 @@ func main() {
 		http.Handle("/spotify/", http.StripPrefix("/spotify", http.FileServer(http.Dir("./static"))))
 		http.HandleFunc("/spotify/devices.json", Devices(dc))
 		http.HandleFunc("/spotify/transfer.json", Transfer(dc))
-		http.HandleFunc("/spotify/transfer/tag", TagTransfer(dc))
-		http.ListenAndServe(":9090", nil)
+		http.HandleFunc("/spotify/transfer/tag/token", TagTransfer(dc, tokens))
+		http.HandleFunc("/spotify/transfer/tag", TagTransfer(dc, make([]string, 0)))
+		err = http.ListenAndServe(":9090", nil)
+		if err != nil {
+			log.Fatalf("Unable to start server: %v", err)
+		}
 	}
 }
