@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 )
 
 type DeviceChanger struct {
@@ -280,13 +281,58 @@ func main() {
 
 	if o.WebServer {
 		http.Handle("/spotify/", http.StripPrefix("/spotify", http.FileServer(http.Dir("./static"))))
-		http.HandleFunc("/spotify/devices.json", Devices(dc))
-		http.HandleFunc("/spotify/transfer.json", Transfer(dc))
-		http.HandleFunc("/spotify/transfer/tag/token", TagTransfer(dc, tokens))
-		http.HandleFunc("/spotify/transfer/tag", TagTransfer(dc, make([]string, 0)))
+		http.HandleFunc("/spotify/devices.json", Authentication(tokens, Devices(dc)))
+		http.HandleFunc("/spotify/transfer.json", Authentication(tokens, Transfer(dc)))
+		http.HandleFunc("/spotify/transfer/tag/token", Authentication(tokens, TagTransfer(dc, tokens)))
+		http.HandleFunc("/spotify/transfer/tag", Authentication(tokens, TagTransfer(dc, make([]string, 0))))
 		err = http.ListenAndServe(":9090", nil)
 		if err != nil {
 			log.Fatalf("Unable to start server: %v", err)
 		}
 	}
+}
+
+func isValidToken(tokens []string, token string) bool {
+	for _, t := range tokens {
+		if token == t {
+			return true
+		}
+	}
+	return false
+}
+
+func getQueryToken(r *http.Request) string {
+	given := r.URL.Query()["token"]
+	if given == nil {
+		return ""
+	}
+
+	if isValidToken(tokens, given[0]) {
+		return given[0]
+	}
+
+	return ""
+}
+
+func Authentication(tokens []string, next http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if len(tokens) > 0 {
+			token := getQueryToken(r)
+			if len(token) == 0 {
+				c, err := r.Cookie("Jacob-Token")
+				if err != nil || !isValidToken(tokens, c.Value) {
+					w.WriteHeader(http.StatusUnauthorized)
+					return
+				}
+			} else {
+				expiration := time.Now().Add(365 * 24 * time.Hour)
+				cookie := http.Cookie{Name: "Jacob-Token", Value: token, Expires: expiration, Path: "/"}
+				http.SetCookie(w, &cookie)
+			}
+
+			next.ServeHTTP(w, r)
+		} else {
+			next.ServeHTTP(w, r)
+		}
+	})
 }
